@@ -18,8 +18,12 @@ namespace QuestionService.Models
         public DateTime? UpdatedAt { get; set; }
         public int ViewCount { get; set; } = 0;
         public List<string> TagSlugs { get; set; } = [];
-        public bool HasAcceptedAnswer { get; set; }
-        public int Votes { get; set; }
+        public bool HasAcceptedAnswer { get; set; } = false;
+        public int Votes { get; set; } = 0;
+        public int AnswerCount { get; set; } = 0;
+
+        // nav properties
+        public List<Answer> Answers { get; set; } = [];
 
     }
 }
