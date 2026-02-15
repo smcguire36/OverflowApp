@@ -1,7 +1,9 @@
 ﻿using Contracts;
 using FastExpressionCompiler;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
 using QuestionService.Data;
 using QuestionService.DTOs;
@@ -246,6 +248,23 @@ namespace QuestionService.Controllers
             );
 
             return NoContent();
+        }
+
+        [HttpGet("errors")]
+        public ActionResult GetErrorResponses(int code)
+        {
+            ModelState.AddModelError("Problem one", "Validation problem one");
+            ModelState.AddModelError("Problem two", "Validation problem two");
+
+            return code switch
+            {
+                400 => BadRequest("Opposite of good request."),
+                401 => Unauthorized(),
+                403 => Forbid(),
+                404 => NotFound(),
+                500 => throw new Exception("This is a server error."),
+                _ => ValidationProblem(ModelState)
+            };
         }
 
     }

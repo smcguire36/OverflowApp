@@ -1,3 +1,4 @@
+using Common;
 using OpenTelemetry.Resources;
 using OpenTelemetry.Trace;
 using SearchService.Data;
@@ -32,7 +33,7 @@ builder.Services.AddTypesenseClient(config =>
         new(uri.Host, uri.Port.ToString(), uri.Scheme)
     };
 });
-
+/*
 builder.Services.AddOpenTelemetry().WithTracing(traceProviderBuilder =>
 {
     traceProviderBuilder.SetResourceBuilder(ResourceBuilder.CreateDefault()
@@ -48,6 +49,17 @@ builder.Host.UseWolverine(opts =>
         cfg.BindExchange("questions");
     });
 });
+*/
+
+await builder.UseWolverineWithRabbitMqAsync(builder.Configuration, opts =>
+{
+    opts.ListenToRabbitQueue("questions.search", cfg =>
+    {
+        cfg.BindExchange("questions");
+    });
+    opts.ApplicationAssembly = typeof(Program).Assembly;
+});
+
 
 var app = builder.Build();
 

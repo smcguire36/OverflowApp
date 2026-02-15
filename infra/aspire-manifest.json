@@ -1,0 +1,303 @@
+{
+  "$schema": "https://json.schemastore.org/aspire-8.0.json",
+  "resources": {
+    "keycloak": {
+      "type": "container.v0",
+      "image": "quay.io/keycloak/keycloak:26.4",
+      "args": [
+        "start",
+        "--import-realm"
+      ],
+      "volumes": [
+        {
+          "name": "keycloak-data",
+          "target": "/opt/keycloak/data",
+          "readOnly": false
+        }
+      ],
+      "env": {
+        "KC_BOOTSTRAP_ADMIN_USERNAME": "admin",
+        "KC_BOOTSTRAP_ADMIN_PASSWORD": "{keycloak-password.value}",
+        "KC_HEALTH_ENABLED": "true",
+        "KC_FEATURES": "opentelemetry"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http",
+          "port": 6001,
+          "targetPort": 8080
+        },
+        "management": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http",
+          "targetPort": 9000
+        }
+      }
+    },
+    "postgres": {
+      "type": "container.v0",
+      "connectionString": "Host={postgres.bindings.tcp.host};Port={postgres.bindings.tcp.port};Username=postgres;Password={postgres-password.value}",
+      "image": "docker.io/library/postgres:17.6",
+      "volumes": [
+        {
+          "name": "postgres-data",
+          "target": "/var/lib/postgresql/data",
+          "readOnly": false
+        }
+      ],
+      "env": {
+        "POSTGRES_HOST_AUTH_METHOD": "scram-sha-256",
+        "POSTGRES_INITDB_ARGS": "--auth-host=scram-sha-256 --auth-local=scram-sha-256",
+        "POSTGRES_USER": "postgres",
+        "POSTGRES_PASSWORD": "{postgres-password.value}"
+      },
+      "bindings": {
+        "tcp": {
+          "scheme": "tcp",
+          "protocol": "tcp",
+          "transport": "tcp",
+          "targetPort": 5432
+        }
+      }
+    },
+    "typesense-api-key": {
+      "type": "parameter.v0",
+      "value": "{typesense-api-key.inputs.value}",
+      "inputs": {
+        "value": {
+          "type": "string",
+          "secret": true
+        }
+      }
+    },
+    "typesense": {
+      "type": "container.v0",
+      "image": "typesense/typesense:30.1",
+      "args": [
+        "--data-dir",
+        "/data",
+        "--api-key",
+        "{typesense-api-key.value}",
+        "--enable-cors"
+      ],
+      "volumes": [
+        {
+          "name": "typesense-data",
+          "target": "/data",
+          "readOnly": false
+        }
+      ],
+      "bindings": {
+        "typesense": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http",
+          "targetPort": 8108
+        }
+      }
+    },
+    "questionDb": {
+      "type": "value.v0",
+      "connectionString": "{postgres.connectionString};Database=questionDb"
+    },
+    "messaging": {
+      "type": "container.v0",
+      "connectionString": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}",
+      "image": "docker.io/library/rabbitmq:4.2-management",
+      "volumes": [
+        {
+          "name": "rabbitmq-data",
+          "target": "/var/lib/rabbitmq",
+          "readOnly": false
+        }
+      ],
+      "env": {
+        "RABBITMQ_DEFAULT_USER": "guest",
+        "RABBITMQ_DEFAULT_PASS": "{messaging-password.value}"
+      },
+      "bindings": {
+        "tcp": {
+          "scheme": "tcp",
+          "protocol": "tcp",
+          "transport": "tcp",
+          "targetPort": 5672
+        },
+        "management": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http",
+          "targetPort": 15672
+        }
+      }
+    },
+    "question-svc": {
+      "type": "project.v0",
+      "path": "../QuestionService/QuestionService.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{question-svc.bindings.http.targetPort}",
+        "KEYCLOAK_HTTP": "{keycloak.bindings.http.url}",
+        "services__keycloak__http__0": "{keycloak.bindings.http.url}",
+        "KEYCLOAK_MANAGEMENT": "{keycloak.bindings.management.url}",
+        "services__keycloak__management__0": "{keycloak.bindings.management.url}",
+        "ConnectionStrings__questionDb": "{questionDb.connectionString}",
+        "QUESTIONDB_HOST": "{postgres.bindings.tcp.host}",
+        "QUESTIONDB_PORT": "{postgres.bindings.tcp.port}",
+        "QUESTIONDB_USERNAME": "postgres",
+        "QUESTIONDB_PASSWORD": "{postgres-password.value}",
+        "QUESTIONDB_URI": "postgresql://postgres:{postgres-password-uri-encoded.value}@{postgres.bindings.tcp.host}:{postgres.bindings.tcp.port}/questionDb",
+        "QUESTIONDB_JDBCCONNECTIONSTRING": "jdbc:postgresql://{postgres.bindings.tcp.host}:{postgres.bindings.tcp.port}/questionDb",
+        "QUESTIONDB_DATABASENAME": "questionDb",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http"
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http"
+        }
+      }
+    },
+    "search-svc": {
+      "type": "project.v0",
+      "path": "../SearchService/SearchService.csproj",
+      "env": {
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EXCEPTION_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_EMIT_EVENT_LOG_ATTRIBUTES": "true",
+        "OTEL_DOTNET_EXPERIMENTAL_OTLP_RETRY": "in_memory",
+        "ASPNETCORE_FORWARDEDHEADERS_ENABLED": "true",
+        "HTTP_PORTS": "{search-svc.bindings.http.targetPort}",
+        "TYPESENSE_TYPESENSE": "{typesense.bindings.typesense.url}",
+        "services__typesense__typesense__0": "{typesense.bindings.typesense.url}",
+        "ConnectionStrings__messaging": "{messaging.connectionString}",
+        "MESSAGING_HOST": "{messaging.bindings.tcp.host}",
+        "MESSAGING_PORT": "{messaging.bindings.tcp.port}",
+        "MESSAGING_USERNAME": "guest",
+        "MESSAGING_PASSWORD": "{messaging-password.value}",
+        "MESSAGING_URI": "amqp://guest:{messaging-password-uri-encoded.value}@{messaging.bindings.tcp.host}:{messaging.bindings.tcp.port}",
+        "typesense-api-key": "{typesense-api-key.value}"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http"
+        },
+        "https": {
+          "scheme": "https",
+          "protocol": "tcp",
+          "transport": "http"
+        }
+      }
+    },
+    "gateway": {
+      "type": "container.v0",
+      "image": "mcr.microsoft.com/dotnet/nightly/yarp:2.3.0-preview.4",
+      "entrypoint": "dotnet",
+      "args": [
+        "/app/yarp.dll"
+      ],
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Production",
+        "QUESTION_SVC_HTTP": "{question-svc.bindings.http.url}",
+        "REVERSEPROXY__ROUTES__route0__MATCH__PATH": "/questions/{**catch-all}",
+        "REVERSEPROXY__ROUTES__route0__CLUSTERID": "cluster_question-svc",
+        "REVERSEPROXY__ROUTES__route1__MATCH__PATH": "/tags/{**catch-all}",
+        "REVERSEPROXY__ROUTES__route1__CLUSTERID": "cluster_question-svc",
+        "REVERSEPROXY__ROUTES__route2__MATCH__PATH": "/search/{**catch-all}",
+        "REVERSEPROXY__ROUTES__route2__CLUSTERID": "cluster_search-svc",
+        "REVERSEPROXY__CLUSTERS__cluster_question-svc__DESTINATIONS__destination1__ADDRESS": "https\u002Bhttp://question-svc",
+        "REVERSEPROXY__CLUSTERS__cluster_search-svc__DESTINATIONS__destination1__ADDRESS": "https\u002Bhttp://search-svc",
+        "services__question-svc__http__0": "{question-svc.bindings.http.url}",
+        "QUESTION_SVC_HTTPS": "{question-svc.bindings.https.url}",
+        "services__question-svc__https__0": "{question-svc.bindings.https.url}",
+        "SEARCH_SVC_HTTP": "{search-svc.bindings.http.url}",
+        "services__search-svc__http__0": "{search-svc.bindings.http.url}",
+        "SEARCH_SVC_HTTPS": "{search-svc.bindings.https.url}",
+        "services__search-svc__https__0": "{search-svc.bindings.https.url}",
+        "ASPNETCORE_URLS": "http://*:8001"
+      },
+      "bindings": {
+        "http": {
+          "scheme": "http",
+          "protocol": "tcp",
+          "transport": "http",
+          "port": 8001,
+          "targetPort": 5000
+        }
+      }
+    },
+    "keycloak-password": {
+      "type": "parameter.v0",
+      "value": "{keycloak-password.inputs.value}",
+      "inputs": {
+        "value": {
+          "type": "string",
+          "secret": true,
+          "default": {
+            "generate": {
+              "minLength": 22
+            }
+          }
+        }
+      }
+    },
+    "postgres-password": {
+      "type": "parameter.v0",
+      "value": "{postgres-password.inputs.value}",
+      "inputs": {
+        "value": {
+          "type": "string",
+          "secret": true,
+          "default": {
+            "generate": {
+              "minLength": 22
+            }
+          }
+        }
+      }
+    },
+    "postgres-password-uri-encoded": {
+      "type": "annotated.string",
+      "value": "{postgres-password.value}",
+      "filter": "uri"
+    },
+    "messaging-password": {
+      "type": "parameter.v0",
+      "value": "{messaging-password.inputs.value}",
+      "inputs": {
+        "value": {
+          "type": "string",
+          "secret": true,
+          "default": {
+            "generate": {
+              "minLength": 22,
+              "special": false
+            }
+          }
+        }
+      }
+    },
+    "messaging-password-uri-encoded": {
+      "type": "annotated.string",
+      "value": "{messaging-password.value}",
+      "filter": "uri"
+    }
+  }
+}
